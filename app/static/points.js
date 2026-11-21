@@ -6,3 +6,17 @@ if(filePicker){
  document.querySelector('#import-csv').addEventListener('click',async event=>{event.target.disabled=true;try{const response=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csv_text:editor.value})});const data=await response.json();if(!response.ok)throw Error(data.detail);location.href=location.pathname+'?run_id='+data.manifest.run_id;}catch(e){editor.setCustomValidity(e.message);editor.reportValidity();}finally{event.target.disabled=false;}});
  editor.addEventListener('input',()=>editor.setCustomValidity(''));
 }
+const publishButton=document.querySelector('#publish');
+if(publishButton){
+ const result=document.querySelector('#publish-result');
+ publishButton.addEventListener('click',async()=>{
+  if(publishButton.disabled)return;publishButton.disabled=true;result.className='';result.textContent='发布中…';
+  try{
+   const response=await fetch('/api/runs/'+document.body.dataset.runId+'/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:Number(document.body.dataset.revision||1)})});
+   const data=await response.json();
+   if(!response.ok)throw Error(data.detail||data.code);
+   result.className='ok';result.textContent='已发布 r'+data.release_revision+' · '+data.release_id;
+   const badge=document.querySelector('#publish-state');badge.className='publish-state ok';badge.textContent='已发布 r'+data.release_revision;
+  }catch(e){result.textContent=e.message;}finally{publishButton.disabled=false;}
+ });
+}

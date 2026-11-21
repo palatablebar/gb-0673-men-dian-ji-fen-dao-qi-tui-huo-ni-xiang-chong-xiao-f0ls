@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import ROOT, META, MODULES, DB_PATH
 from app.errors import BusinessError
 from app.engine import evaluate
+from app.release import release_payload, business_day
 from app import store
 from app.archive import serialize
 
@@ -44,9 +45,38 @@ def review(run_id:str,payload:dict=Body(...)):
     revision=payload.get('revision')
     if not isinstance(revision,int) or revision<1: raise BusinessError('BAD_REVISION','版本号须为正整数')
     return store.review(DB_PATH,run_id,revision)
+@app.post('/api/runs/{run_id}/publish')
+def publish(run_id:str,payload:dict=Body(default={})):
+    result=store.get(DB_PATH,run_id)
+    gate=result.get('publish')
+    if not gate:
+        raise BusinessError('INCOMPLETE_RUN','批次尚未完成对账')
+    revision=payload.get('revision')
+    if revision is not None and revision!=result['revision']:
+        raise BusinessError('STALE_VERSION','复核版本已更新，请刷新',409)
+    if not gate['publishable']:
+        raise BusinessError('RELEASE_BLOCKED','余额对账未通过，禁止发布',409)
+    if gate['day']!=business_day(result['context']['as_of']):
+        raise BusinessError('BAD_TIME','结算日不一致')
+    return store.publish(DB_PATH,result,release_payload(result))
+@app.get('/api/releases/{day}')
+def releases(day:str):
+    return {'day':day,'releases':store.releases(DB_PATH,day)}
+@app.get('/api/releases/{day}/active')
+def active_release(day:str):
+    return store.release(DB_PATH,day)
+@app.get('/api/runs/{run_id}/release')
+def run_release(run_id:str):
+    result=store.get(DB_PATH,run_id)
+    return store.release(DB_PATH,business_day(result['context']['as_of']))
 @app.get('/api/export/{run_id}')
 def export(run_id:str):
     result=store.get(DB_PATH,run_id)
-    return Response(serialize(result),media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="{run_id}.zip"'})
+    day=(result.get('publish') or {}).get('day')
+    release=None
+    if day:
+        try: release=store.release(DB_PATH,day)
+        except BusinessError: release=None
+    return Response(serialize(result,release),media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="{run_id}.zip"'})
 for key in MODULES:
     app.include_router(import_module(f'app.modules.{key}.handler').router)

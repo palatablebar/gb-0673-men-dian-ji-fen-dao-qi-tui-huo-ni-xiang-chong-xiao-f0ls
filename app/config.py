@@ -7,3 +7,5 @@ RULE_VERSION = '2026.11.17-r2'
 DB_PATH = os.environ.get('DB_PATH', '/data/workbench.sqlite')
 SENTINELS = {'', '-', 'N/A', 'NULL', '未知'}
 MAX_BYTES = 2_000_000
+DATASETS = ('dirty', 'clean', 'legacy', 'mixed')
+SOURCE_LABELS = {'legacy': '旧门店', 'new': '新门店'}
